@@ -86,6 +86,7 @@ Dataset documentation, preprocessing scripts, feature engineering, EDA, figures,
 ## Contributors
 
 - [Shenwei Zhang](https://github.com/sz381)
+- [Arthvijay](https://github.com/arthvijay)
 
 Any additional group member should be added after their GitHub identity is verified and their genuine contribution is recorded.
 
