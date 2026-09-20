@@ -11,7 +11,8 @@ import pandas as pd
 import requests
 from dotenv import load_dotenv
 
-load_dotenv()
+ROOT = Path(__file__).resolve().parents[1]
+load_dotenv(ROOT / ".env")
 RAW = Path(__file__).resolve().parents[1] / "data" / "raw"
 
 
@@ -30,8 +31,9 @@ def download_stackoverflow_questions():
             "todate": int(next_month.timestamp()) - 1,
             "sort": "creation",
             "filter": "total",
-            "key": os.environ["STACKEXCHANGE_KEY"],
         }
+        if os.getenv("STACKEXCHANGE_KEY"):
+            params["key"] = os.environ["STACKEXCHANGE_KEY"]
         data = requests.get("https://api.stackexchange.com/2.3/questions", params=params).json()
         if "total" not in data:
             print(f"Stack Exchange API stopped: {data['error_message']}")
