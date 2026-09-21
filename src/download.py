@@ -3,6 +3,9 @@
 1. Stack Overflow new questions per month, 2018-2026 (Stack Exchange API)
 2. ChatGPT weekly active users (OpenAI announcements, compiled by hand)
 3. Stack Overflow Developer Survey 2023-2025
+4. Questions per tag, before vs. after ChatGPT (Stack Exchange API)
+5. Stack Overflow answers per month, 2018-2026 (Stack Exchange API)
+6. The questions themselves, one month before ChatGPT and one month now (Stack Exchange API)
 """
 import os
 from pathlib import Path
@@ -82,7 +85,94 @@ def download_developer_survey():
         print(f"saved survey/{path.name}")
 
 
+def download_tag_survival():
+    """Dataset 4: how many questions each popular tag got before vs. after ChatGPT.
+
+    Windows are Sep 2021 - Aug 2022 and the same twelve months three years later.
+    Source: Stack Exchange API, 201 requests. Saves data/raw/stackoverflow_tag_survival.csv.
+    """
+    key = os.getenv("STACKEXCHANGE_KEY")
+    tags = requests.get("https://api.stackexchange.com/2.3/tags", params={
+        "site": "stackoverflow", "order": "desc", "sort": "popular", "pagesize": 100, "key": key,
+    }).json()["items"]
+    tags = sorted(tags, key=lambda tag: -tag["count"])  # this endpoint returns the page alphabetically
+
+    windows = {"pre": ("2021-09-01", "2022-09-01"), "post": ("2025-09-01", "2026-09-01")}
+    rows = []
+    for tag in tags:
+        counts = {}
+        for window, (start, end) in windows.items():
+            data = requests.get("https://api.stackexchange.com/2.3/questions", params={
+                "site": "stackoverflow",
+                "tagged": tag["name"],
+                "fromdate": int(pd.Timestamp(start).timestamp()),
+                "todate": int(pd.Timestamp(end).timestamp()) - 1,
+                "sort": "creation",
+                "filter": "total",
+                "key": key,
+            }).json()
+            counts[window] = data["total"]
+        rows.append({"tag": tag["name"], "pre": counts["pre"], "post": counts["post"]})
+    pd.DataFrame(rows).to_csv(RAW / "stackoverflow_tag_survival.csv", index=False)
+    print(f"saved stackoverflow_tag_survival.csv ({len(rows)} tags)")
+
+
+def download_monthly_answers():
+    """Dataset 5: how many answers were written each month, 2018-01 to 2026-08.
+
+    Same months as the question counts, so the two can be compared side by side.
+    Source: Stack Exchange API, 104 requests. Saves data/raw/stackoverflow_monthly_answers.csv.
+    """
+    rows = []
+    for month in pd.date_range("2018-01-01", "2026-08-01", freq="MS"):
+        next_month = month + pd.DateOffset(months=1)
+        data = requests.get("https://api.stackexchange.com/2.3/answers", params={
+            "site": "stackoverflow",
+            "fromdate": int(month.timestamp()),
+            "todate": int(next_month.timestamp()) - 1,
+            "sort": "creation",
+            "filter": "total",
+            "key": os.getenv("STACKEXCHANGE_KEY"),
+        }).json()
+        rows.append({"month": month.date(), "answers": data["total"]})
+    pd.DataFrame(rows).to_csv(RAW / "stackoverflow_monthly_answers.csv", index=False)
+    print("saved stackoverflow_monthly_answers.csv")
+
+
+def download_question_samples():
+    """Dataset 6: the questions themselves, one month before ChatGPT and one month now.
+
+    Titles and tags for August 2022 (first 300) and August 2026 (all of them), so we can see what
+    kind of question is left. Source: Stack Exchange API, about 15 requests.
+    Saves data/raw/stackoverflow_question_samples.csv.
+    """
+    rows = []
+    for month, pages in [("2022-08-01", 3), ("2026-08-01", 12)]:
+        start = pd.Timestamp(month)
+        for page in range(1, pages + 1):
+            data = requests.get("https://api.stackexchange.com/2.3/questions", params={
+                "site": "stackoverflow",
+                "fromdate": int(start.timestamp()),
+                "todate": int((start + pd.DateOffset(months=1)).timestamp()) - 1,
+                "sort": "creation",
+                "order": "asc",
+                "page": page,
+                "pagesize": 100,
+                "key": os.getenv("STACKEXCHANGE_KEY"),
+            }).json()
+            for question in data["items"]:
+                rows.append({"month": start.date(), "title": question["title"],
+                             "tags": ";".join(question["tags"])})
+            if not data["has_more"]:
+                break
+    pd.DataFrame(rows).to_csv(RAW / "stackoverflow_question_samples.csv", index=False)
+    print(f"saved stackoverflow_question_samples.csv ({len(rows)} questions)")
+
+
 if __name__ == "__main__":
     download_stackoverflow_questions()
     save_chatgpt_weekly_users()
     download_developer_survey()
+    # download_tag_survival()
+    # download_monthly_answers()
+    # download_question_samples()
